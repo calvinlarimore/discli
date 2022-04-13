@@ -7,7 +7,6 @@ Using any form of code to control a non-bot Discord account breaks [Discord Comm
 
 ## Security
 Is discli safe? I don't know, look at the source.  
-In all seriousness, the biggest security flaw is that your token is stored in plaintext in config.json, which isn't exactly ideal. I am currently working on improving this in the [auth](https://github.com/giantfroje/discli/tree/auth) branch.
 
 ## Installation
 1. Clone the repository 
@@ -20,20 +19,13 @@ git clone https://github.com/giantfroje/discli.git
 pip install -r requirements.txt
 ```
 
-3. Run `discli.py` to generate template `config.json`: 
+3. Run `discli.py`: 
 ```
 py discli.py
 ```
 
-4. Edit `config.json` and set your [Discord token](https://discordhelp.net/discord-token):
-```
-{"token": "<Token Here>"}
-```
-
-5. Run `discli.py` again: 
-```
-py discli.py
-```
+4. Input your [Discord token](https://discordhelp.net/discord-token)
+5. Create a password (Note: this doesn't have to be your Discord password)
 
 That's it!
 
