@@ -28,13 +28,42 @@ from curses.textpad import rectangle
 
 import discord
 
+import base64
+from Crypto.Cipher import AES
+from Crypto.Hash import SHA256
+from Crypto import Random
 
 
 channel = None
 ready = False
 
+password = ""
+
+
+def encrypt(key, source, encode=True):
+    key = SHA256.new(key).digest()  # use SHA-256 over our key to get a proper-sized AES key
+    IV = Random.new().read(AES.block_size)  # generate IV
+    encryptor = AES.new(key, AES.MODE_CBC, IV)
+    padding = AES.block_size - len(source) % AES.block_size  # calculate needed padding
+    source += bytes([padding]) * padding  # Python 2.x: source += chr(padding) * padding
+    data = IV + encryptor.encrypt(source)  # store the IV at the beginning and encrypt
+    return base64.b64encode(data).decode("latin-1") if encode else data
+
+def decrypt(key, source, decode=True):
+    if decode:
+        source = base64.b64decode(source.encode("latin-1"))
+    key = SHA256.new(key).digest()  # use SHA-256 over our key to get a proper-sized AES key
+    IV = source[:AES.block_size]  # extract the IV from the beginning
+    decryptor = AES.new(key, AES.MODE_CBC, IV)
+    data = decryptor.decrypt(source[AES.block_size:])  # decrypt
+    padding = data[-1]  # pick the padding value from the end; Python 2.x: ord(data[-1])
+    if data[-padding:] != bytes([padding]) * padding:  # Python 2.x: chr(padding) * padding
+        raise ValueError("Invalid padding...")
+    return data[:-padding]  # remove the padding
+
 
 def load_config():
+    global password
     default_config = json.loads('{"token": "<Token Here>"}')
     config = {}
 
@@ -49,22 +78,24 @@ def load_config():
         noconfig = True
 
     notoken = "token" not in config
+    
 
-    if notoken:
+    if noconfig or notoken:
         config["token"] = default_config["token"]
+        token = input("Discord Token: ")
+        password = input("Set Password: ")
+        confirm_password = input("Confirm Password: ")
+        if password != confirm_password:
+            confirm_password = print("Passwords did not match!")
+            sys.exit(69)
+
+        encrypted_token = encrypt(bytes(password, "utf-8"), bytes(token, "utf-8"))
+        config["token"] = encrypted_token
 
     f = open("config.json", "w")
     f.write(json.dumps(config))
     f.close()
 
-    if noconfig:
-        print("\"config.json\" not found, creating from default")
-        sys.exit(69)
-
-    if notoken:
-        config = default_config
-        print("\"config.json\" did not contain \"token\" field, creating from default")
-        sys.exit(68)
 
     return config
 
@@ -206,6 +237,7 @@ async def send_message(message, channel):
     await channel.send(message)
 
 async def process_command(command):
+    control_state = 0
     if command == "quit" or command == "q":
         await client.close()
     elif command == "servers" or command == "s" or command == "guilds" or command == "g":
@@ -409,16 +441,23 @@ async def main():
         stdscr.refresh()
         await asyncio.sleep(0.01)
 
+    stop_curses(stdscr)
+
 
 
 config = load_config()
 client = start_discord_client()
 create_discord_events(client)
 
-try:
-    client.run(config["token"], bot=False)
-except (discord.errors.LoginFailure):
-    print("Invalid token")
-    sys.exit(70)
+if password == "":
+    password = input("Password: ")
 
-stop_curses(stdscr)
+try:
+    token = decrypt(bytes(password, "utf-8"), config["token"]).decode("utf-8")
+    client.run(token, bot=False)
+except (discord.errors.LoginFailure):
+    print("Invalid token or password")
+    sys.exit(70)
+except ValueError:
+    print("Invalid password")
+    sys.exit(71)
